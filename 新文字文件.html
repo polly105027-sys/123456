@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>貪吃蛇遊戲</title>
+
+<style>
+body{
+    margin:0;
+    background:#1e1e1e;
+    color:white;
+    font-family:"Microsoft JhengHei";
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:20px;
+}
+
+h1{margin:10px;}
+
+.info{
+    display:flex;
+    gap:15px;
+    margin-bottom:10px;
+}
+
+canvas{
+    background:#0f0f0f;
+    border:3px solid #4CAF50;
+}
+
+button{
+    margin-top:10px;
+    padding:10px 20px;
+    border:none;
+    background:#4CAF50;
+    color:white;
+    border-radius:6px;
+    cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<h1>貪吃蛇遊戲</h1>
+
+<div class="info">
+    <div id="score">分數：0</div>
+    <div id="speed">速度：正常</div>
+    <div id="food">食物：1</div>
+</div>
+
+<canvas id="game" width="500" height="500"></canvas>
+
+<button onclick="restartGame()">重新開始</button>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const grid = 25;
+const size = canvas.width / grid;
+
+let snake;
+let foods;
+let dx,dy;
+let score;
+let boost = false;
+let running = true;
+
+let lastTime = 0;
+let tickRate = 300;
+let accumulator = 0;
+
+// ================= INIT =================
+function init(){
+
+    snake=[{x:10,y:10}];
+    foods=[];
+
+    dx=1;dy=0;
+    score=0;
+    boost=false;
+    running=true;
+
+    spawnFoods();
+}
+
+// ================= FOOD COUNT =================
+function foodCount(){
+    return Math.floor(score/10)+1;
+}
+
+// ================= FOOD =================
+function randomType(){
+    const list=["apple","grape","orange","lemon"];
+    return list[Math.floor(Math.random()*list.length)];
+}
+
+function createFood(){
+
+    let f,ok=false;
+
+    while(!ok){
+
+        f={
+            x:Math.floor(Math.random()*size),
+            y:Math.floor(Math.random()*size),
+            type:randomType()
+        };
+
+        ok=true;
+
+        for(const s of snake)
+            if(s.x===f.x&&s.y===f.y) ok=false;
+
+        for(const o of foods)
+            if(o.x===f.x&&o.y===f.y) ok=false;
+    }
+
+    foods.push(f);
+}
+
+function spawnFoods(){
+
+    const target=foodCount();
+
+    while(foods.length<target) createFood();
+    while(foods.length>target) foods.pop();
+
+    document.getElementById("food").innerText="食物："+target;
+}
+
+// ================= SPEED =================
+function updateSpeed(){
+
+    let base=Math.max(80,300-score*8);
+    tickRate=boost?Math.max(40,base/2):base;
+
+    document.getElementById("speed").innerText=
+        boost?"速度：加速中":"速度：正常";
+}
+
+// ================= GRID =================
+function drawGrid(){
+
+    ctx.strokeStyle="#2a2a2a";
+
+    for(let i=0;i<=size;i++){
+
+        let p=i*grid;
+
+        ctx.beginPath();
+        ctx.moveTo(p,0);
+        ctx.lineTo(p,500);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0,p);
+        ctx.lineTo(500,p);
+        ctx.stroke();
+    }
+}
+
+// ================= FRUIT =================
+function drawFruit(f){
+
+    let x=f.x*grid;
+    let y=f.y*grid;
+
+    if(f.type==="apple"){
+        ctx.fillStyle="red";
+        ctx.beginPath();
+        ctx.arc(x+12,y+12,9,0,Math.PI*2);
+        ctx.fill();
+    }
+
+    if(f.type==="grape"){
+        ctx.fillStyle="purple";
+        for(let i=0;i<2;i++)
+        for(let j=0;j<3;j++){
+            ctx.beginPath();
+            ctx.arc(x+8+i*6,y+8+j*6,3,0,Math.PI*2);
+            ctx.fill();
+        }
+    }
+
+    if(f.type==="orange"){
+        ctx.fillStyle="orange";
+        ctx.beginPath();
+        ctx.arc(x+12,y+12,9,0,Math.PI*2);
+        ctx.fill();
+    }
+
+    if(f.type==="lemon"){
+        ctx.fillStyle="yellow";
+        ctx.beginPath();
+        ctx.ellipse(x+12,y+12,8,5,0,0,Math.PI*2);
+        ctx.fill();
+    }
+}
+
+// ================= SNAKE =================
+function drawSnake(){
+
+    snake.forEach((s,i)=>{
+
+        let x=s.x*grid;
+        let y=s.y*grid;
+
+        if(i===0){
+            ctx.fillStyle=boost?"#00ffff":"#00ff88";
+            ctx.fillRect(x+1,y+1,grid-2,grid-2);
+
+            ctx.fillStyle="black";
+            ctx.fillRect(x+6,y+6,3,3);
+            ctx.fillRect(x+15,y+6,3,3);
+        }else{
+            ctx.fillStyle="#4CAF50";
+            ctx.fillRect(x+2,y+2,grid-4,grid-4);
+        }
+    });
+}
+
+// ================= GAME LOGIC =================
+function update(){
+
+    if(!running) return;
+
+    spawnFoods();
+    updateSpeed();
+
+    const head={x:snake[0].x+dx,y:snake[0].y+dy};
+
+    if(head.x<0||head.y<0||head.x>=size||head.y>=size)
+        return gameOver();
+
+    for(const s of snake)
+        if(s.x===head.x&&s.y===head.y)
+            return gameOver();
+
+    snake.unshift(head);
+
+    let eat=false;
+
+    for(let i=0;i<foods.length;i++){
+
+        if(head.x===foods[i].x&&head.y===foods[i].y){
+
+            foods.splice(i,1);
+            score++;
+
+            document.getElementById("score").innerText=
+                "分數："+score;
+
+            eat=true;
+            break;
+        }
+    }
+
+    if(!eat) snake.pop();
+}
+
+// ================= RENDER =================
+function render(){
+
+    ctx.fillStyle="#0f0f0f";
+    ctx.fillRect(0,0,500,500);
+
+    drawGrid();
+    foods.forEach(drawFruit);
+    drawSnake();
+}
+
+// ================= LOOP (FIXED) =================
+function loop(time){
+
+    if(!lastTime) lastTime=time;
+
+    let delta=time-lastTime;
+    lastTime=time;
+
+    accumulator+=delta;
+
+    if(accumulator>tickRate){
+
+        while(accumulator>tickRate){
+            update();
+            accumulator-=tickRate;
+        }
+    }
+
+    render();
+
+    requestAnimationFrame(loop);
+}
+
+// ================= GAME OVER =================
+function gameOver(){
+    running=false;
+    alert("遊戲結束！分數："+score);
+}
+
+// ================= RESTART =================
+function restartGame(){
+    init();
+}
+
+// ================= CONTROLS =================
+document.addEventListener("keydown",(e)=>{
+
+    if(!running) return;
+
+    if(e.code==="Space"){
+        e.preventDefault();
+        boost=true;
+        updateSpeed();
+    }
+
+    if(e.key==="ArrowUp"&&dy!==1){dx=0;dy=-1;}
+    if(e.key==="ArrowDown"&&dy!==-1){dx=0;dy=1;}
+    if(e.key==="ArrowLeft"&&dx!==1){dx=-1;dy=0;}
+    if(e.key==="ArrowRight"&&dx!==-1){dx=1;dy=0;}
+});
+
+document.addEventListener("keyup",(e)=>{
+
+    if(e.code==="Space"){
+        boost=false;
+        updateSpeed();
+    }
+});
+
+// ================= START =================
+init();
+requestAnimationFrame(loop);
+</script>
+
+</body>
+</html>
